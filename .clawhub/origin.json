@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "registry": "https://clawhub.ai",
+  "slug": "tencentcloud-api-skill",
+  "ownerHandle": "tencent-adm",
+  "installedVersion": "1.0.3",
+  "installedAt": 1782363220595,
+  "artifact": {
+    "kind": "archive",
+    "sha256": "a3fbf54796e575a5f3647c9be77c870b63362973721994f1ec0005ce9016d607",
+    "integrity": "sha256-o/v1R5bldaXzZHyb53yHC2M2KXNyGZTx7AAFzpAW1gc="
+  },
+  "skillFile": {
+    "path": "SKILL.md",
+    "sha256": "687e52d3cdbd6291427240c516b84dd23c575522082a8d90e802b5c231f43208"
+  }
+}
