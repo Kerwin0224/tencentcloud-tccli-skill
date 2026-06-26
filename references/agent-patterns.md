@@ -59,11 +59,7 @@
 
 ### 压缩管道（最常用）
 
-```
---filter (JMESPath 裁剪) + --output text (去 JSON 结构)
-```
-
-本质：**用 CLI 的本地算力换 agent 的 token 预算**。数据变换从 agent 的推理层下沉到 CLI 的执行层。
+`--filter`（JMESPath 裁剪）+ `--output text`（去 JSON 结构）。本质与用法见 SKILL.md §3.3「压缩管道」；此处补充其作为组合模式的位置——它是下面四段式模板驱动的结果裁剪段。
 
 ### 模板驱动（复杂入参）
 

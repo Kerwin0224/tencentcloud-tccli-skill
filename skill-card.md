@@ -42,7 +42,7 @@ Mitigation: Treat tccli responses as data for review and avoid executing content
 **Other Properties Related to Output:** [May propose tccli commands and interpret JSON API responses; write operations should be explicitly reviewed before execution.] <br>
 
 ## Skill Version(s): <br>
-1.0.3 (source: server-resolved release metadata; artifact frontmatter lists 1.0.0) <br>
+1.2.0 (与 SKILL.md frontmatter 一致) <br>
 
 ## Ethical Considerations: <br>
 Users should evaluate whether this skill is appropriate for their environment, review any generated or modified files before relying on them, and apply their organization's safety, security, and compliance requirements before deployment. <br>

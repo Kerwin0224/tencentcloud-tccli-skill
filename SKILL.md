@@ -1,8 +1,8 @@
 ---
 name: tencentcloud-tccli-skill
 display_name: 腾讯云 TCCLI 助手
-description: Skill to call Cloud API for Tencent Cloud (腾讯云). Use when user wants to query, create, or manage cloud resources, automate operations, save tokens on large responses, wait for async tasks, or use template-driven API calls. Triggers on: 腾讯云, tccli, cloud api, 云资源, 云管理, 自动化运维, agent 优化, token 节省, 压缩输出, 异步等待, 模板调用, 审计追踪.
-version: 1.1.0
+description: Call Tencent Cloud APIs via tccli. Use when the user wants to query, create, modify, or delete 腾讯云 resources (CVM/COS/CBS/VPC/TKE…), automate 云资源 operations, or needs agent-optimized tccli patterns — token compression (filter/text), async waiting, template-driven calls, audit tagging, or multi-version API selection.
+version: 1.2.0
 tags: [tccli, cloud-api, tencent-cloud, automation, agent-optimized]
 keywords: [腾讯云, tccli, cloud api, 云资源, 云管理, 自动化运维, agent优化, token节省]
 prompt_template: 对 {service} 产品执行 {action} 操作
@@ -36,9 +36,13 @@ examples:
 
 ## 核心原则
 
-> **Token budget 优先**：每次调用默认走**压缩管道**（`--filter` + `--output text`），用 CLI 算力换 token 预算。
+> **Token budget 优先**：每次查询调用默认走**压缩管道**（`--filter` + `--output text`），详见 §3.3。
 >
 > **优先检索最佳实践 → 再查接口文档 → 最后调用 API**。不要跳过文档检索直接调用，避免用错接口或遗漏参数。
+>
+> **双源校验**：文档缓存提供操作意图和参数语义，但接口名和响应字段名以 tccli 自身为准。`tccli <service> help` 是 Action 名的权威来源；API 实际响应是字段名的权威来源。调用前交叉校验两者。
+>
+> **版本意识**：部分服务（如 TKE）有多个并行 API 版本，默认版本未必是你要的。校验 Action 时留意 `AVAILABLE VERSIONS`，必要时 `--version` 切换，详见 §1.3。
 
 ---
 
@@ -46,7 +50,7 @@ examples:
 
 ## Step 1：检索 API 文档
 
-调用前先通过 curl + grep 检索业务、接口、最佳实践、数据结构。参考 [references/refs.md](references/refs.md) 获取完整检索方式。
+调用前先通过 curl + grep 检索业务、接口、最佳实践、数据结构。完整检索命令（业务/实践/接口/数据结构）见 [references/refs.md](references/refs.md)。
 
 ### 1.1 发现业务
 
@@ -54,45 +58,60 @@ examples:
 
 ```sh
 curl -s https://cloudcache.tencentcs.com/capi/refs/services.md | grep 云服务器
+# → [cvm](service/cvm/index.md) | 云服务器 | 2017-03-12 | ...
 ```
 
-参考输出：
+### 1.2 检索接口与文档
 
-```
-[cvm](service/cvm/index.md) | 云服务器 | 2017-03-12 | ...
-```
+在业务接口列表中检索（接口名即 tccli 的 `<Action>`），并阅读接口文档与数据结构获取参数语义。**优先检索最佳实践**，未覆盖再查接口列表——检索命令见 [references/refs.md](references/refs.md)。
 
-### 1.2 发现最佳实践
+> 文档缓存提供操作意图和参数语义，但接口名、字段名以 tccli 自身为准（下一步校验）。
 
-优先检索是否有匹配当前场景的最佳实践。
+### 1.3 校验操作名、版本与 Action 数 — 以 tccli 为准
+
+文档缓存的接口名是近似参考，可能与 tccli 实际 Action 名不一致。**调用前必须用 `tccli <service> help` 交叉校验**：
 
 ```sh
-curl -s https://cloudcache.tencentcs.com/capi/refs/service/cvm/practices.md | grep 重装
+# 校验 Action 名是否存在（关键词过滤，去掉尖括号便于阅读）
+tccli <service> help 2>&1 | grep -o '<[A-Za-z]*>' | tr -d '<>' | grep -i "<关键词>"
+# 例: tccli tke help 2>&1 | grep -o '<[A-Za-z]*>' | tr -d '<>' | grep -i nodepool
 ```
 
-### 1.3 检索接口
+**完成准则**：要调用的 Action 名出现在 help 输出中；若用文档缓存名找不到，用 help 输出的实际名。
 
-若最佳实践未覆盖，在业务接口列表中检索（接口名即 tccli 的 `<Action>`）。
+#### ⚠️ 多版本并行 — 部分服务有多个 API 版本
+
+`tccli <service> help` 顶部 `AVAILABLE VERSIONS` 列出该服务的 API 版本。**多数服务（CVM/CBS/TCR…）只有一个版本**；但 **TKE 等服务有两个并行版本**，命名和 Action 集完全不同，不是补丁迭代：
 
 ```sh
-curl -s https://cloudcache.tencentcs.com/capi/refs/service/cvm/actions.md | grep "扩容\|磁盘"
+tccli tke help 2>&1 | head -5
+# AVAILABLE VERSIONS
+#     2018-05-25  (recommended)   ← 默认走这个（270 Action，全功能）
+#     2022-05-01                   ← 官方当前版本（22 Action，新抽象）
 ```
 
-### 1.4 阅读接口文档
+- **`recommended` ≠ 官方推荐**：它是 tccli 对版本列表**首元素的机械标记**（源码 `if version == versions[0]`），不代表"最新/最好"。以腾讯云官方「产品版本」页为准。
+- **切换版本**：`tccli <service> <Action> --version <版本>`。切换后 Action 集和命名可能完全不同（如 TKE 2018-05-25 用 `CreateClusterNodePool`，2022-05-01 用 `CreateNodePool`）。
+- **默认版本可能不是你想要的**：若某 Action 在默认版本找不到，先用 `tccli <service> help --version <另一版本>` 查它是否属于另一版本。
 
-获取参数说明和支持的地域信息：
+#### ⚠️ 计数与校验方法论 — 用 `grep -o`，禁用 `grep -c`
+
+`tccli <service> help` 的 `AVAILABLE ACTIONS` **全部 Action 拼在同一行**（空格分隔），所以：
+
+| 命令 | 返回 | 能否用于计数/校验 |
+|:-----|:-----|:-----------------|
+| `grep -c '<[A-Za-z]*>'` | **行数**（恒为 2：标题行 + ACTIONS 那一行） | ❌ 禁用 |
+| `grep -o '<[A-Za-z]*>' \| wc -l` | **匹配数**（每个 Action 计一次） | ✅ 用这个 |
+
+`grep -o` 的原始值还包含 USAGE 行的 `<action>` 占位符（`tccli <service> <action> [--param...]`），计数时需扣去——注意占位符带尖括号，过滤也要带尖括号：
 
 ```sh
-curl -s https://cloudcache.tencentcs.com/capi/refs/service/cvm/action/ResizeInstanceDisks.md
+# 正确计数某服务的真实 Action 数（扣 <action> 占位符）
+tccli <service> help 2>&1 | grep -o '<[A-Za-z]*>' | grep -v '<action>' | wc -l
+# TKE 默认版 → 270；TKE 2022-05-01 → 22；TCR → 124
 ```
 
-### 1.5 阅读数据结构
-
-文档中涉及的数据结构可进一步查看：
-
-```sh
-curl -s https://cloudcache.tencentcs.com/capi/refs/service/cvm/model/SystemDisk.md
-```
+> 文档缓存声明的接口数量（如 "接口数量: 22 个"）可能仅是子集，成熟服务实际 Action 数通常远超此数。
 
 ## Step 2：凭证配置
 
@@ -165,13 +184,28 @@ tccli cvm DescribeInstances --region ap-guangzhou
 }
 ```
 
-### 3.2 Agent 优化模式
+### 3.2 首次接触 API：自举学习闭环
+
+首次调用任何不熟悉的 Action 时，**先自举学习 API 合约，再走压缩管道**。tccli 没有输出骨架，输出结构靠实测学习。四步闭环：
+
+```
+1. --generate-cli-skeleton          # 学入参骨架（参数名、类型、嵌套结构）
+2. 最小查询 --Limit 1 --output json  # 学出参结构（响应字段名、嵌套层级）
+3. 基于出参结构构造 --filter          # 用实际字段名，避免猜错
+4. 后续调用走压缩管道                 # --filter + --output text，省 token
+```
+
+**完成准则**：入参骨架已生成、输出字段名已从真实响应确认（非猜测）、`--filter` 表达式引用的字段名与响应键名逐一对应。
+
+> ⚠️ `--filter` 字段名必须匹配 API 实际响应键名（响应是 `NodePoolSet` 就不能写 `NodePools`）。输出骨架（`--generate-cli-skeleton output`）未实现，只能用最小查询替代。
+
+### 3.3 Agent 优化模式
 
 以下 flags 正交可叠加，agent 应按场景组合使用。详见 [references/agent-patterns.md](references/agent-patterns.md)。
 
 #### 压缩管道 — 省 token
 
-**每次查询调用默认启用。** `--filter`（JMESPath）裁剪字段，`--output text` 去掉 JSON 结构开销：
+**每次查询调用默认启用。** `--filter`（JMESPath）裁剪字段，`--output text` 去掉 JSON 结构开销。本质是**压缩管道**——用 CLI 本地算力换 agent 的 token 预算，把数据变换从推理层下沉到执行层。
 
 ```sh
 # 最省 token 的查询模式
@@ -180,7 +214,7 @@ tccli cvm DescribeInstances --region ap-guangzhou \
   --output text
 ```
 
-JMESPath 支持条件过滤、多级管道、排序，在 CLI 侧完成数据变换——**用 CLI 算力换 token 预算**：
+JMESPath 支持条件过滤、多级管道、排序，在 CLI 侧完成数据变换：
 
 ```sh
 # 简单投影
@@ -254,7 +288,7 @@ tccli cvm DescribeInstances --profile master \
 tccli cvm DescribeInstances --region ap-guangzhou --language en-US --timeout 15
 ```
 
-### 3.3 Agent 组合示例
+### 3.4 Agent 组合示例
 
 典型的 agent 长任务链路——5 个 flag 正交叠加：
 
@@ -269,7 +303,7 @@ tccli cvm RunInstances \
   --output text
 ```
 
-### 3.4 效率约束
+### 3.5 效率约束
 
 腾讯云 API 默认限频为 **10 次/秒**（部分接口更低），批量操作时需控制调用频率，避免触发 `RequestLimitExceeded`。建议串行调用或加间隔，不要并发轰炸。
 
