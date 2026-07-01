@@ -80,10 +80,11 @@ CloudAudit 中可见完整链路：谁（request-client）以什么身份（prof
 ### 自举学习（API 探索）
 
 ```
-1. --generate-cli-skeleton 拿入参骨架
-2. 最小查询（Limit=1）拿输出结构（替代缺失的输出骨架）
-3. 基于输出结构构造 --filter 表达式
-4. 后续调用走压缩管道
+1. help --detail 拿入参契约（必填+类型+枚举+描述+嵌套语法，比 skeleton 全）
+2. help 的 OUTPUT PARAMETER 段拿出参字段名（skeleton 的 output 未实现）
+3. 最小查询（Limit=1）拿输出真实结构（替代缺失的输出骨架）
+4. 基于输出结构构造 --filter 表达式
+5. 后续调用走压缩管道
 ```
 
 ---
